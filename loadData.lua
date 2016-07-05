@@ -13,11 +13,11 @@ end
 loadData = {}
 local trainPaths  = {}
 local testPaths  = {}
-for f in paths.files("train/","mask.tif") do
-		trainPaths[#trainPaths+1] = "train/"..f
+for f in paths.files("train/"..params.level.."/","mask.tif") do
+		trainPaths[#trainPaths+1] = "train/" ..params.level .. "/".. f
 end
-for f in paths.files("test/",".tif") do
-		testPaths[#testPaths+1] = "test/"..f
+for f in paths.files("test/"..params.level.."/",".tif") do
+		testPaths[#testPaths+1] = "test/".. params.level .. "/" ..f
 end
 
 function loadData.init(tid,nThreads)

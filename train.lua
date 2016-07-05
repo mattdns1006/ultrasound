@@ -31,8 +31,8 @@ function train(inputs,target)
 		print(string.format("Learning rate dropping from %f ====== > %f. ",clr,params.lr))
 	end
 	if i % params.modelSave == 0 then
-		print("==> Saving model " .. params.modelName .. ".")
-		torch.save(params.modelName,model)
+		print("==> Saving model " .. modelName .. ".")
+		torch.save(modelName,model)
 	end
 	xlua.progress(i,params.nIter)
 	i = i + 1

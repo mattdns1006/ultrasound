@@ -14,6 +14,7 @@ do
 				tid = idx -- Thread id
 				print(string.format("Initialized thread %d of %d.", tid,params.nThreads))
 				loadData = require "loadData"
+				imgPaths = loadData.init(tid,params.nThreads)
 			end
 			)
 end

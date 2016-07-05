@@ -8,7 +8,7 @@ require "gnuplot"
 dofile("movingAverage.lua")
 loadData = require("loadData")
 dofile("train.lua")
-
+dofile("dice.lua")
 
 cmd = torch.CmdLine()
 cmd:text()
@@ -17,7 +17,7 @@ cmd:option("-modelName","deconv1.model","Name of model.")
 cmd:option("-modelSave",2000,"How often to save.")
 cmd:option("-loadModel",0,"Load model.")
 cmd:option("-nThreads",10,"Number of threads.")
-
+cmd:option("-actualTest",0,"Acutal test predictions.")
 
 cmd:option("-nFeats",16,"Number of features.")
 
@@ -30,6 +30,7 @@ cmd:option("-displayFreq",100,"Display images frequency.")
 cmd:option("-displayGraph",0,"Display graph of loss.")
 cmd:option("-displayGraphFreq",500,"Display graph of loss.")
 cmd:option("-nIter",100000,"Number of iterations.")
+cmd:option("-zoom",3,"Image zoom.")
 
 cmd:option("-ma",100,"Moving average.")
 cmd:option("-run",1,"Run.")
@@ -47,10 +48,10 @@ optimState = {
 optimMethod = optim.adam
 dofile("donkeys.lua")
 
-function display(x,y,output,trainOrTest)
+function display(x,y,output,trainOrTest,name)
 	if params.display == 1 then 
 		if imgDisplay == nil then 
-			local zoom = 4
+			local zoom = params.zoom
 			local initPic = torch.range(1,torch.pow(100,2),1):reshape(100,100)
 			imgDisplay0 = image.display{image=initPic, zoom=zoom, offscreen=false}
 			imgDisplay1 = image.display{image=initPic, zoom=zoom, offscreen=false}
@@ -65,14 +66,14 @@ function display(x,y,output,trainOrTest)
 		local title
 		if trainOrTest == "train" then
 			title = "Train"
-			image.display{image = x, win = imgDisplay0, legend = title}
-			image.display{image = y, win = imgDisplay1, legend = title}
-			image.display{image = output, win = imgDisplay2, legend = title}
+			image.display{image = x, win = imgDisplay0, legend = title.. " input - " .. name}
+			image.display{image = y, win = imgDisplay1, legend = title.. " truth."}
+			image.display{image = output, win = imgDisplay2, legend = title.. " prediction."}
 		else	
 			title = "Test"
-			image.display{image = x, win = imgDisplay3, legend = title}
-			image.display{image = y, win = imgDisplay4, legend = title}
-			image.display{image = output, win = imgDisplay5, legend = title}
+			image.display{image = x, win = imgDisplay3, legend = title.. " input - " .. name}
+			image.display{image = y, win = imgDisplay4, legend = title.. " truth."}
+			image.display{image = output, win = imgDisplay5, legend = title.. " prediction."}
 		end
 	end
 end
@@ -118,8 +119,8 @@ function buildModel()
 		
 	local model = nn.Sequential()
 	--local testInput = torch.rand(1,3,384,768)
-	for i = 1, 12 do down(model); 
-	end; for i = 1, 2 do up(model);
+	for i = 1, 10 do down(model); 
+	end; for i = 1, 3 do up(model);
 	end
 	model:add(Convolution(nInputs,1,3,3,1,1,1,1))
 	model:add(nn.Sigmoid())
@@ -127,7 +128,7 @@ function buildModel()
 
 	return model
 end
-x,y = loadData.loadObs("train")
+
 
 print("Model name ==>")
 print(params.modelName)
@@ -137,36 +138,86 @@ if params.loadModel == 1 then
 else 	
 	model = buildModel():cuda()
 end
+outSize = model:forward(torch.rand(1,1,420,580):cuda()):size()
 criterion = nn.MSECriterion():cuda()
 
-function load()
-	if i == nil then i = 1 end
-	local x,y,output
-	x,y = loadData.loadObs("train")
-
-	return x,y
-end
-
-
 function run()
-	if i == nil then i = 1 end
+	if i == nil then 
+		i = 1 
+		trainMa = MovingAverage.new(params.ma)
+		testMa = MovingAverage.new(params.ma)
+		trainDiceMa = MovingAverage.new(params.ma)
+		testDiceMa = MovingAverage.new(params.ma)
+
+		trainLosses = {}
+		testLosses = {}
+		trainDice = {}
+		testDice = {}
+	end
 	while i < params.nIter do
 		donkeys:addjob(function()
 					local x,y
-					x,y = loadData.loadObs("train")
-					return x,y
+					if tid == 1 or params.actualTest == 1 then 
+						name, x,y = loadData.loadObs("test",imgPaths)
+					else
+						name, x,y = loadData.loadObs("train",imgPaths)
+					end
+					return x,tid,name,y
 			       end,
-			       function(x,y)
-					output,targetResize = train(x,y)
-					if i % params.displayFreq == 0 then
-						display(x,targetResize,output,"train")
+			       function(x,tid,name,y)
+				        if params.actualTest == 1 then
+						pred = model:forward(x)
+						predUpscaled = image.scale(pred:squeeze():double(),580,420)
+						local name = name:gsub("test/","")
+						image.saveJPG("testPredictions/"..name,predUpscaled)
+						xlua.progress(i,5508)
+						i = i + 1
+					else 	
+						
+						if tid == 1 then
+							testOutput, testTarget, testLoss = test(x,y)
+							testLosses[#testLosses+1] = testLoss
+							testDice[#testDice+1] = diceCoeff(testOutput,testTarget,0.5) 
+							if i % params.displayFreq == 0 then
+								display(x,testTarget,testOutput,"test",name)
+							end
+						else 
+							trainOutput, trainTarget, trainLoss = train(x,y)
+							trainLosses[#trainLosses+1] = trainLoss
+							trainDice[#trainDice+1] = diceCoeff(trainOutput,trainTarget,0.5) 
+							if i % params.displayFreq == 0 then
+								display(x,trainTarget,trainOutput,"train",name)
+							end
+						end
+
+
+						if i % params.ma == 0 and #testLosses > params.ma then
+							local lossesTrain = torch.Tensor(trainLosses)
+							local lossesTest = torch.Tensor(testLosses)
+							trainMA = trainMa:forward(lossesTrain)
+							testMA = testMa:forward(lossesTest)
+
+							local trainDiceT = torch.Tensor(trainDice)
+							local testDiceT = torch.Tensor(testDice)
+							trainMADice = trainDiceMa:forward(trainDiceT)
+							testMADice = testDiceMa:forward(testDiceT)
+							print(string.format("Model %s has ma mean (%d) training loss of % f, test loss of %f, dice scores of {%f,%f)",
+									     modelName, params.ma, trainMA[{{-1}}]:squeeze(), testMA[{{-1}}]:squeeze(),
+									     trainMADice[{{-1}}]:squeeze(), testMADice[{{-1}}]:squeeze()
+							)
+							)
+							collectgarbage()
+						end
 					end
 				end
 				)
+				if params.actualTest == 1 and i == 5508 then print("Finished testing"); break; end
 	end
 end
 if params.run == 1 then run() end
 	
+
+
 
 
 

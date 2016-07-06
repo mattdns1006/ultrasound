@@ -5,6 +5,7 @@ require "cunn"
 cv = require "cv"
 local csv = require "csv"
 require "cv.imgcodecs"
+require "cv.imgproc"
 
 local function fileExists(name)
 	local f=io.open(name,"r")
@@ -55,18 +56,53 @@ function loadData.init(tid,nThreads)
 	return imgPaths 
 end
 
+local function prepare(img)
+	local imgOut
+	if params.level ~= 0 then
+		imgOut = image.scale(img:squeeze(),params.inSize[4],params.inSize[3],"bilinear")
+		imgOut:csub(imgOut:mean()) -- remove mean for brightness
+	end
+	return imgOut
+end
+
+local function augment(x,y)
+	if torch.uniform() < 0.8 then
+		h,w = x:size(1), x:size(2)
+		center = cv.Point2f{w/2,h/2}
+		angle = torch.uniform(-5,5)
+		scale = 1 + torch.rand(1)[1]*0.03
+		M = cv.getRotationMatrix2D{center,angle,scale}
+		x = cv.warpAffine{x,M,flags=cv.INTER_LINEAR,borderMode=cv.BORDER_REPLICATE}
+		y = cv.warpAffine{y,M,flags=cv.INTER_LINEAR,borderMode=cv.BORDER_REFLECT}
+	end
+	return x,y
+end
+
+function augmentExample()
+	local initPic = torch.range(1,torch.pow(100,2),1):reshape(100,100)
+	zoom = 4
+	imgDisplay0 = image.display{image=initPic, zoom=zoom, offscreen=false}
+	imgDisplay1 = image.display{image=initPic, zoom=zoom, offscreen=false}
+	for j=1,200 do
+		rObs = trainCsv[torch.random(#trainCsv)]
+		x = cv.imread{rObs:gsub("_mask",""),cv.IMREAD_UNCHANGED} 
+		x = x:narrow(1,2,x:size(1)-2):narrow(2,2,x:size(2)-2)
+		y = cv.imread{rObs,cv.IMREAD_UNCHANGED} 
+		for i=1, 5 do
+			dstX, dstY = augment(x,y)
+			image.display{image = dstX, win = imgDisplay0, legend = " x"}
+			image.display{image = dstY, win = imgDisplay1, legend =  " y"}
+			sys.sleep(0.2)
+		end
+	end
+end
+
 
 function loadData.loadObs(trainOrTest,imgPaths)
 	local x, y
 	local rObs 
 	local obs
-	local function rescale(img)
-		local imgOut
-		if params.level ~= 0 then
-			imgOut = image.scale(img:squeeze(),params.inSize[4],params.inSize[3],"bilinear")
-		end
-		return imgOut
-	end
+
 	if params.actualTest == 1 then
 		if testObsIndex == nil then testObsIndex = 1 end
 		if testObsIndex > #imgPaths then 
@@ -79,7 +115,7 @@ function loadData.loadObs(trainOrTest,imgPaths)
 		obs = imgPaths[testObsIndex]
 		x = cv.imread{"test/"..obs,cv.IMREAD_UNCHANGED} 
 		testObsIndex = testObsIndex + 1
-		x = rescale(x)
+		x = prepare(x)
 		return obs, x:cuda():resize(1,1,x:size(1),x:size(2))
 	end
 	if trainOrTest == "train" then
@@ -87,14 +123,7 @@ function loadData.loadObs(trainOrTest,imgPaths)
 		x = cv.imread{rObs:gsub("_mask",""),cv.IMREAD_UNCHANGED} 
 		y = cv.imread{rObs,cv.IMREAD_UNCHANGED} 
 		y:div(255)
-
-		local randInt = torch.random(2)
-		if randInt == 1 then	
-			-- nothing
-		else
-			image.hflip(x,x)
-			image.hflip(y,y)
-		end
+		x,y = augment(x,y)
 
 	elseif trainOrTest == "test" then
 		if testObsIndex == nil then testObsIndex = 1 end
@@ -108,7 +137,7 @@ function loadData.loadObs(trainOrTest,imgPaths)
 			testObsIndex = testObsIndex + 1
 		end
 	end
-	x = rescale(x)
+	x = prepare(x)
 
 	return rObs, x:cuda():resize(1,1,x:size(1),x:size(2)),y:cuda():resize(y:size(1),y:size(2))
 end

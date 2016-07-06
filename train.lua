@@ -15,7 +15,7 @@ function train(inputs,target)
 		if x ~= parameters then parameters:copy(x) end
 		gradParameters:zero()
 		output = model:forward(inputs) -- Only one input for training unlike testing
-		targetResize = image.scale(target:squeeze():double(),outSize[4],outSize[3],"bilinear"):cuda()
+		targetResize = image.scale(target:squeeze():double(),params.outSize[4],params.outSize[3],"bilinear"):cuda()
 		loss = criterion:forward(output,targetResize)
 		dLoss_dO = criterion:backward(output,targetResize)
 		model:backward(inputs,dLoss_dO)

@@ -3,6 +3,7 @@ require "image"
 require "cunn"
 
 cv = require "cv"
+local csv = require "csv"
 require "cv.imgcodecs"
 
 local function fileExists(name)
@@ -10,27 +11,36 @@ local function fileExists(name)
 	if f~=nil then io.close(f) return true else return false end
 end
 
+
+local trainCsv = csv.csvToTable("train.csv")
+local testCsv = csv.csvToTable("test.csv") -- test csv for continous testing (not actual test)
+
 loadData = {}
 local trainPaths  = {}
-local testPaths  = {}
-for f in paths.files("train/"..params.level.."/","mask.tif") do
-		trainPaths[#trainPaths+1] = "train/" ..params.level .. "/".. f
+testPaths  = {}
+for f in paths.files("train/","mask") do
+		trainPaths[#trainPaths+1] = "train/" .. f
 end
-for f in paths.files("test/"..params.level.."/",".tif") do
-		testPaths[#testPaths+1] = "test/".. params.level .. "/" ..f
+for f in paths.files("test/",".tif") do -- actual test
+		testPaths[#testPaths+1] = f
 end
 
 function loadData.init(tid,nThreads)
 
-	imgPaths = {}
+	local imgPaths = {}
 	local t
 	if params.actualTest == 1 then 
 		t = testPaths
+		for i = tid, #t , nThreads do 
+			imgPaths[#imgPaths + 1] = t[i]	
+		end
+	elseif tid == 1 then 
+		imgPaths = testCsv --for thread 1 for continuous testing
 	else 
-		t = trainPaths 
-	end
-	for i = tid, #t , nThreads do 
-		imgPaths[#imgPaths + 1] = t[i]	
+		t = trainCsv
+		for i = tid, #t , nThreads -1 do 
+			imgPaths[#imgPaths + 1] = t[i]	
+		end
 	end
 
 	return imgPaths 
@@ -41,6 +51,13 @@ function loadData.loadObs(trainOrTest,imgPaths)
 	local x, y
 	local rObs 
 	local obs
+	local function rescale(img)
+		local imgOut
+		if params.level ~= 0 then
+			imgOut = image.scale(img:squeeze(),params.inSize[4],params.inSize[3],"bilinear")
+		end
+		return imgOut
+	end
 	if params.actualTest == 1 then
 		if testObsIndex == nil then testObsIndex = 1 end
 		if testObsIndex > #imgPaths then 
@@ -51,8 +68,9 @@ function loadData.loadObs(trainOrTest,imgPaths)
 
 		end
 		obs = imgPaths[testObsIndex]
-		x = cv.imread{obs,cv.IMREAD_UNCHANGED} 
+		x = cv.imread{"test/"..obs,cv.IMREAD_UNCHANGED} 
 		testObsIndex = testObsIndex + 1
+		x = rescale(x)
 		return obs, x:cuda():resize(1,1,x:size(1),x:size(2))
 	end
 	if trainOrTest == "train" then
@@ -84,12 +102,13 @@ function loadData.loadObs(trainOrTest,imgPaths)
 		x = cv.imread{rObs:gsub("_mask",""),cv.IMREAD_UNCHANGED} 
 		y = cv.imread{rObs,cv.IMREAD_UNCHANGED} 
 		y:div(255)
-		if testObsIndex > #rObs then
+		if testObsIndex == #imgPaths then
 			testObsIndex = 1
 		else
 			testObsIndex = testObsIndex + 1
 		end
 	end
+	x = rescale(x)
 
 	return rObs, x:cuda():resize(1,1,x:size(1),x:size(2)),y:cuda():resize(y:size(1),y:size(2))
 end

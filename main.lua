@@ -20,6 +20,7 @@ cmd:option("-actualTest",0,"Acutal test predictions.")
 
 cmd:option("-nFeats",16,"Number of features.")
 cmd:option("-level",0,"Which level (downsample).")
+cmd:option("-diceThreshold",0.5,"What threshold?")
 
 cmd:option("-lr",0.001,"Learning rate.")
 cmd:option("-lrDecay",1.1,"Learning rate change factor.")
@@ -51,7 +52,7 @@ optimState = {
 
 optimMethod = optim.adam
 loadData = require("loadData")
-dofile("donkeys.lua")
+
 
 function display(x,y,output,trainOrTest,name)
 	if params.display == 1 then 
@@ -97,6 +98,9 @@ function buildModel()
 	local Linear = nn.Linear
 	local Dropout = nn.Dropout
 	local nFeats = params.nFeats 
+	local nFeatsInc = params.nFeats/2
+	local nOutputs
+	local nInputs
 	local function same(model)
 		nInputs = nOutputs or 1
 		nOutputs = nOutputs or 6 
@@ -106,7 +110,11 @@ function buildModel()
 	end
 	local function down(model)
 		nInputs = nOutputs or 1
-		nOutputs = nOutputs or nFeats 
+		if nOutputs == nil then
+			nOutputs = nFeats
+		else 
+			nOutputs = nFeatsInc + nOutputs
+		end
 		model:add(Convolution(nInputs,nOutputs,3,3,1,1,1,1))
 		:add(SBN(nOutputs))
 		:add(af())
@@ -115,7 +123,7 @@ function buildModel()
 	end
 	local function up(model)
 		nInputs = nOutputs or 1
-		nOutputs = nOutputs or nFeats 
+		nOutputs = nOutputs -nFeatsInc
 		model:add(Convolution(nInputs,nOutputs,3,3,1,1,1,1))
 		:add(SBN(nOutputs))
 		:add(af())
@@ -127,6 +135,7 @@ function buildModel()
 	for i = 1, params.nDown do down(model); 
 	end; for i = 1, params.nUp do up(model);
 	end
+	nInputs = nOutputs or 1
 	model:add(Convolution(nInputs,1,3,3,1,1,1,1))
 	model:add(nn.Sigmoid())
 	layers.init(model)
@@ -144,10 +153,15 @@ if params.loadModel == 1 then
 else 	
 	model = buildModel():cuda()
 end
-outSize = model:forward(torch.rand(1,1,420,580):cuda()):size()
+local sf = 1/torch.pow(2,params.level)
+params.inSize = torch.rand(1,1,420*sf,580*sf):size()
+outSize = model:forward(torch.rand(1,1,420*sf,580*sf):cuda()):size()
+params.outSize = outSize
 print("==> Output Size")
 print(outSize)
 criterion = nn.MSECriterion():cuda()
+print("==> Init threads")
+dofile("donkeys.lua")
 
 function run()
 	if i == nil then 
@@ -176,7 +190,7 @@ function run()
 				        if params.actualTest == 1 then
 						pred = model:forward(x)
 						predUpscaled = image.scale(pred:squeeze():double(),580,420)
-						local name = name:gsub("test/","")
+						local name = name:gsub("test/"..params.level.."/","")
 						image.saveJPG("testPredictions/"..name,predUpscaled)
 						xlua.progress(i,5508)
 						i = i + 1
@@ -185,14 +199,14 @@ function run()
 						if tid == 1 then
 							testOutput, testTarget, testLoss = test(x,y)
 							--testLosses[#testLosses+1] = testLoss
-							testDice[#testDice+1] = diceCoeff(testOutput,testTarget,0.5) 
+							testDice[#testDice+1] = diceCoeff(testOutput,testTarget,params.diceThreshold) 
 							if i % params.displayFreq == 0 then
 								display(x,testTarget,testOutput,"test",name)
 							end
 						else 
 							trainOutput, trainTarget, trainLoss = train(x,y)
 							trainLosses[#trainLosses+1] = trainLoss
-							trainDice[#trainDice+1] = diceCoeff(trainOutput,trainTarget,0.5) 
+							trainDice[#trainDice+1] = diceCoeff(trainOutput,trainTarget,params.diceThreshold) 
 							if i % params.displayFreq == 0 then
 								display(x,trainTarget,trainOutput,"train",name)
 							end

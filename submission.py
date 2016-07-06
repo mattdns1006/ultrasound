@@ -6,7 +6,7 @@ import re
 
 def prep(img):
     img = img.astype('float32')
-    img = cv2.threshold(img, 128, 250, cv2.THRESH_BINARY)[1].astype(np.uint8)
+    img = cv2.threshold(img, int(128*0.612), 250, cv2.THRESH_BINARY)[1].astype(np.uint8)
     return img
 
 

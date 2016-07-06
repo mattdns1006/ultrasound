@@ -30,13 +30,22 @@ function loadData.init(tid,nThreads)
 	local imgPaths = {}
 	local t
 	if params.actualTest == 1 then 
+		print("Thread ==>", tid, " actual testing.")
 		t = testPaths
 		for i = tid, #t , nThreads do 
 			imgPaths[#imgPaths + 1] = t[i]	
 		end
+	elseif params.fullTrain == 1 then 
+		print("Thread ==>", tid, " training on everything.")
+		t = trainCsv
+		for i = tid, #t , nThreads do 
+			imgPaths[#imgPaths + 1] = t[i]	
+		end
 	elseif tid == 1 then 
+		print("Thread ==>", tid, " testing on subset.")
 		imgPaths = testCsv --for thread 1 for continuous testing
 	else 
+		print("Thread ==>", tid, " training on subset.")
 		t = trainCsv
 		for i = tid, #t , nThreads -1 do 
 			imgPaths[#imgPaths + 1] = t[i]	
@@ -62,7 +71,7 @@ function loadData.loadObs(trainOrTest,imgPaths)
 		if testObsIndex == nil then testObsIndex = 1 end
 		if testObsIndex > #imgPaths then 
 			while true do
-				print("Thread sleepng ...")
+				print("Thread sleeping ...")
 				sys.sleep(15)
 			end
 
@@ -79,22 +88,13 @@ function loadData.loadObs(trainOrTest,imgPaths)
 		y = cv.imread{rObs,cv.IMREAD_UNCHANGED} 
 		y:div(255)
 
-		--[[
 		local randInt = torch.random(2)
 		if randInt == 1 then	
-		elseif randInt == 2 then
-			image.hflip(x,x)
-			image.hflip(y,y)
-		elseif randInt == 3 then
-			image.vflip(x,x)
-			image.vflip(y,y)
-		elseif randInt == 4 then
-			image.vflip(x,x)
-			image.vflip(y,y)
+			-- nothing
+		else
 			image.hflip(x,x)
 			image.hflip(y,y)
 		end
-		]]--
 
 	elseif trainOrTest == "test" then
 		if testObsIndex == nil then testObsIndex = 1 end

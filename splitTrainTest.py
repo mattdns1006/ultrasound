@@ -11,7 +11,7 @@ for f in glob.glob(trainPath+"*mask*"):
     allFiles.append(f)
 
 perm = np.random.permutation(len(allFiles))
-split = int(perm.size*0.8)
+split = int(perm.size*0.9)
 trainIdx, testIdx = perm[:split],perm[split:]
 train = [allFiles[f] for f in trainIdx]
 test = [allFiles[f] for f in testIdx]

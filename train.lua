@@ -47,7 +47,7 @@ function test(inputs,target)
 	local targetResize
 
 	output = model:forward(inputs)
-	targetResize = image.scale(target:squeeze():double(),outSize[4],outSize[3],"bilinear"):cuda()
+	targetResize = image.scale(target:squeeze():double(),params.outSize[4],params.outSize[3],"bilinear"):cuda()
 	loss = criterion:forward(output,targetResize)
 	return output, targetResize, loss
 end

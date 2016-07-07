@@ -2,11 +2,11 @@ import numpy as np
 import cv2
 import glob
 import re
-
+import pdb
 
 def prep(img):
-    img = img.astype('float32')
-    img = cv2.threshold(img, int(128*0.612), 250, cv2.THRESH_BINARY)[1].astype(np.uint8)
+    img = cv2.GaussianBlur(img,(15,15),1)
+    img = cv2.threshold(img, 255*0.46, 1, cv2.THRESH_BINARY)[1].astype(np.uint8)
     return img
 
 
@@ -26,6 +26,10 @@ def run_length_enc(label):
 
 def submission():
 
+    global maxIntensity
+    global minIntensity
+    maxIntensity = []
+    minIntensity = []
     rles = []
     ids = []
 
@@ -33,6 +37,8 @@ def submission():
     for f in glob.glob("testPredictions/*"):
         number =re.findall("\d+",f)
         img = cv2.imread(f,0)
+        maxIntensity.append(img.max())
+        minIntensity.append(img.min())
         img = prep(img)
         rle = run_length_enc(img)
         rles.append(rle)

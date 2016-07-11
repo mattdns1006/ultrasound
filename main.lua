@@ -2,6 +2,7 @@ require "image"
 require "gnuplot"
 require "nn"
 require "cunn"
+require "cutorch"
 require "xlua"
 require "optim"
 require "gnuplot"
@@ -9,6 +10,8 @@ dofile("movingAverage.lua")
 dofile("train.lua")
 dofile("dice.lua")
 dofile("counter.lua")
+
+cutorch.setDevice(1)
 
 cmd = torch.CmdLine()
 cmd:text()
@@ -20,27 +23,31 @@ cmd:option("-nThreads",10,"Number of threads.")
 cmd:option("-trainAll",0,"Train on all images in training set.")
 cmd:option("-actualTest",0,"Acutal test predictions.")
 
-cmd:option("-nFeats",16,"Number of features.")
+cmd:option("-inW",290,"Input size")
+cmd:option("-inH",210,"Input size")
+
+cmd:option("-sf",0.7,"Scaling factor.")
+cmd:option("-nFeats",22,"Number of features.")
 cmd:option("-kernelSize",3,"Kernel size.")
 cmd:option("-level",0,"Which level (downsample).")
 cmd:option("-diceThreshold",0.5,"What threshold?")
 
 cmd:option("-lr",0.001,"Learning rate.")
-cmd:option("-lrDecay",1.1,"Learning rate change factor.")
-cmd:option("-lrChange",5000,"How often to change lr.")
+cmd:option("-lrDecay",1.2,"Learning rate change factor.")
+cmd:option("-lrChange",10000,"How often to change lr.")
 
 cmd:option("-display",0,"Display images.")
 cmd:option("-displayFreq",100,"Display images frequency.")
 cmd:option("-displayGraph",0,"Display graph of loss.")
 cmd:option("-displayGraphFreq",500,"Display graph of loss.")
-cmd:option("-nIter",200000,"Number of iterations.")
+cmd:option("-nIter",2000000,"Number of iterations.")
 cmd:option("-zoom",3,"Image zoom.")
 
 cmd:option("-ma",100,"Moving average.")
 cmd:option("-run",1,"Run.")
 
-cmd:option("-nDown",10,"Number of down steps.")
-cmd:option("-nUp",3,"Number of up steps.")
+cmd:option("-nDown",8,"Number of down steps.")
+cmd:option("-nUp",2,"Number of up steps.")
 cmd:text()
 
 params = cmd:parse(arg)
@@ -87,7 +94,7 @@ function display(x,y,output,trainOrTest,name)
 end
 
 print("Model name ==>")
-modelName = string.format("deconv_%d_%d_%d",params.nFeats,params.nDown,params.nUp)
+modelName = string.format("models/deconv_%d_%d_%d_%d_%d",params.inH,params.inW,params.nFeats,params.nDown,params.nUp)
 if params.loadModel == 1 then
 	print("==> Loading model")
 	print(modelName)
@@ -96,9 +103,10 @@ else
 	model = models.model2():cuda()
 end
 print(model)
-local sf = 1/torch.pow(2,params.level)
-params.inSize = torch.rand(1,1,420*sf,580*sf):size()
-params.outSize = model:forward(torch.rand(1,1,420*sf,580*sf):cuda()):size()
+inT = torch.rand(1,1,params.inH,params.inW)
+--inT = torch.rand(1,1,420*params.sf,580*params.sf)
+params.inSize = inT:size()
+params.outSize = model:forward(inT:cuda()):size()
 print("==> Input Size")
 print(params.inSize)
 print("==> Output Size")
@@ -149,14 +157,12 @@ function run()
 							testDice2[#testDice2+1] = diceCoeff(testOutput,testTarget,params.diceThreshold) 
 
 							if i % params.displayFreq == 0 and params.display == 1 then
-								--[[
 
 								local testDiceT = torch.Tensor(testDice):mean(1):squeeze()
 								local X = torch.linspace(0.05,0.95,testDiceT:size(1))
 								local max = X[testDiceT:eq(testDiceT:max())][1]
 								local title = string.format("Max = %f",max)
 								gnuplot.plot({title,X,testDiceT})
-								]]--
 								display(x,testTarget,testOutput,"test",name)
 							end
 						else 
@@ -185,14 +191,16 @@ function run()
 
 							)
 							)
-							trainLosses = {}
-							trainDice = {}
-							testDice = {}
-							testDice2 = {}
+
 							collectgarbage()
 						end
 						if i % 10000 ==0  then
 							print("Number of different train/test observations seen",csv.length(trainCounter),csv.length(testCounter))
+							print("Resetting scores...")
+							trainLosses = {}
+							trainDice = {}
+							testDice = {}
+							testDice2 = {}
 						end
 					end
 				end

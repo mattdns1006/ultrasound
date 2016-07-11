@@ -29,6 +29,12 @@ function train(inputs,target)
 		local clr = params.lr
 		params.lr = params.lr/params.lrDecay
 		print(string.format("Learning rate dropping from %f ====== > %f. ",clr,params.lr))
+			optimState = {
+				learningRate = params.lr,
+				beta1 = 0.9,
+				beta2 = 0.999,
+				epsilon = 1e-8
+			}
 	end
 	if i % params.modelSave == 0 then
 		print("==> Saving model " .. modelName .. ".")

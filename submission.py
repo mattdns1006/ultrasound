@@ -6,7 +6,7 @@ import pdb
 
 def prep(img):
     img = cv2.GaussianBlur(img,(15,15),1)
-    img = cv2.threshold(img, 255*0.46, 1, cv2.THRESH_BINARY)[1].astype(np.uint8)
+    img = cv2.threshold(img, 255*0.56, 1, cv2.THRESH_BINARY)[1].astype(np.uint8)
     return img
 
 

@@ -69,19 +69,20 @@ end
 
 function prepare(img)
 	local imgOut
-	if params.level ~= 0 then
-		imgOut = image.scale(img:squeeze(),params.inSize[4],params.inSize[3],"bilinear"):double()
-		imgOut:csub(imgOut:mean()) -- remove mean for brightness
-	end
+	imgOut = image.scale(img:squeeze(),params.inSize[4],params.inSize[3],"bilinear"):double()
+	imgOut:csub(imgOut:mean()) -- remove mean for brightness
 	return imgOut
 end
 
-local function augment(x,y)
+function augment(x,y)
 	local h,w = x:size(1), x:size(2)
 	local center = cv.Point2f{w/2,h/2}
 	local angle = torch.uniform(-5,5)
 	local scale = 1 + torch.rand(1)[1]*0.03
+	local tx ,ty = torch.random(10), torch.random(10)
 	local M = cv.getRotationMatrix2D{center,angle,scale}
+	M[1][3] = tx
+	M[2][3] = ty
 	local x1 = cv.warpAffine{x,M,flags=cv.INTER_LINEAR,borderMode=cv.BORDER_REPLICATE}
 	local y1 = cv.warpAffine{y,M,flags=cv.INTER_LINEAR,borderMode=cv.BORDER_REFLECT}
 	return x1,y1

@@ -4,6 +4,7 @@ function train(inputs,target)
 	local dLoss_dO
 	local batchLoss
 	local targetResize
+	local loss
 
 	if i == 1 then
 		if model then parameters,gradParameters = model:getParameters() end

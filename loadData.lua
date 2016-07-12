@@ -48,20 +48,22 @@ function loadData.init(tid,nThreads)
 			imgPaths[#imgPaths + 1] = t[i]	
 		end
 	elseif params.trainAll == 1 then 
-		print("Thread ==>", tid, " training on everything.")
 		t = bothCsvs
 		for i = tid, #t , nThreads do 
 			imgPaths[#imgPaths + 1] = t[i]	
 		end
+		print("Thread ==>", tid, " training on everything. Number of observations = ", #imgPaths)
+
 	elseif tid == 1 then 
-		print("Thread ==>", tid, " testing on subset.")
 		imgPaths = testCsv --for thread 1 for continuous testing
+		print("Thread ==>", tid, " testing on subset. Number of observations = ", #imgPaths)
 	else 
-		print("Thread ==>", tid, " training on subset.")
 		t = trainCsv
+
 		for i = tid, #t , nThreads -1 do 
 			imgPaths[#imgPaths + 1] = t[i]	
 		end
+		print("Thread ==>", tid, " training on subset. Number of observations = ", #imgPaths)
 	end
 
 	return imgPaths 
@@ -78,13 +80,13 @@ function augment(x,y)
 	local h,w = x:size(1), x:size(2)
 	local center = cv.Point2f{w/2,h/2}
 	local angle = torch.uniform(-5,5)
-	local scale = 1 + torch.rand(1)[1]*0.03
-	local tx ,ty = torch.random(10), torch.random(10)
+	local scale = 1 + torch.rand(1)[1]*0.01
+	local tx ,ty = torch.random(-15,15), torch.random(-15,15)
 	local M = cv.getRotationMatrix2D{center,angle,scale}
 	M[1][3] = tx
 	M[2][3] = ty
 	local x1 = cv.warpAffine{x,M,flags=cv.INTER_LINEAR,borderMode=cv.BORDER_REPLICATE}
-	local y1 = cv.warpAffine{y,M,flags=cv.INTER_LINEAR,borderMode=cv.BORDER_REFLECT}
+	local y1 = cv.warpAffine{y,M,flags=cv.INTER_LINEAR,borderMode=cv.BORDER_REPLICATE}
 	return x1,y1
 end
 
@@ -96,9 +98,9 @@ function augmentExample()
 	for j=1,200 do
 		rObs = trainCsv[torch.random(#trainCsv)]
 		x = cv.imread{rObs:gsub("_mask",""),cv.IMREAD_UNCHANGED} 
-		x = x:narrow(1,2,x:size(1)-2):narrow(2,2,x:size(2)-2)
+
 		y = cv.imread{rObs,cv.IMREAD_UNCHANGED} 
-		for i=1, 5 do
+		for i=1, 4 do
 			dstX, dstY = augment(x,y)
 			image.display{image = dstX, win = imgDisplay0, legend = " x"}
 			image.display{image = dstY, win = imgDisplay1, legend =  " y"}

@@ -2,7 +2,7 @@ require "image"
 require "gnuplot"
 require "nn"
 require "cunn"
-require "cutorch"
+--require "cutorch"
 require "xlua"
 require "optim"
 require "gnuplot"
@@ -11,7 +11,6 @@ dofile("train.lua")
 dofile("dice.lua")
 dofile("counter.lua")
 
-cutorch.setDevice(1)
 
 cmd = torch.CmdLine()
 cmd:text()
@@ -94,17 +93,17 @@ function display(x,y,output,trainOrTest,name)
 end
 
 print("Model name ==>")
-modelName = string.format("models/deconv_%d_%d_%d_%d_%d",params.inH,params.inW,params.nFeats,params.nDown,params.nUp)
+modelName = string.format("models/deconv_%d_%d_%d_%d_%d_%d",params.inH,params.inW,params.nFeats,params.nDown,params.nUp,params.kernelSize)
 if params.loadModel == 1 then
 	print("==> Loading model")
-	print(modelName)
 	model = torch.load(modelName):cuda()
 else 	
 	model = models.model2():cuda()
 end
-print(model)
+--print(model)
+print("deconv_inH_inW_nFeats_nDown_nUp_kSize")
+print(modelName)
 inT = torch.rand(1,1,params.inH,params.inW)
---inT = torch.rand(1,1,420*params.sf,580*params.sf)
 params.inSize = inT:size()
 params.outSize = model:forward(inT:cuda()):size()
 print("==> Input Size")
@@ -158,11 +157,13 @@ function run()
 
 							if i % params.displayFreq == 0 and params.display == 1 then
 
+								--[[
 								local testDiceT = torch.Tensor(testDice):mean(1):squeeze()
 								local X = torch.linspace(0.05,0.95,testDiceT:size(1))
 								local max = X[testDiceT:eq(testDiceT:max())][1]
 								local title = string.format("Max = %f",max)
 								gnuplot.plot({title,X,testDiceT})
+								]]--
 								display(x,testTarget,testOutput,"test",name)
 							end
 						else 
@@ -171,10 +172,11 @@ function run()
 							trainLosses[#trainLosses + 1] = trainLoss
 							trainDice[#trainDice+1] = diceCoeff(trainOutput,trainTarget,params.diceThreshold) 
 							if i % params.displayFreq == 0 and params.display == 1 then
-								--display(x,trainTarget,trainOutput,"train",name)
+								display(x,trainTarget,trainOutput,"train",name)
 							end
 						end
 
+						--[[
 						if i % params.ma == 0 and #testDice2 > params.ma then
 
 							local trainLossesT = torch.Tensor(trainLosses)
@@ -188,19 +190,25 @@ function run()
 									     trainMADice[{{-1}}]:squeeze(), 
 									     testMADice[{{-1}}]:squeeze(),
 									     trainMALosses[{{-1}}]:squeeze()
-
 							)
 							)
-
 							collectgarbage()
 						end
-						if i % 10000 ==0  then
+						]]--
+						params.scoreFreq = 5000
+						if #trainLosses > params.scoreFreq and tid==2 then
 							print("Number of different train/test observations seen",csv.length(trainCounter),csv.length(testCounter))
 							print("Resetting scores...")
+							local function meanScore(t)
+								local T = torch.Tensor(t)
+								return T:mean()
+							end
+							print(string.format("Mean values for last {trainDice %d,testDice%d,trainLoss%d} = {%f,%f,%f}",
+							#trainDice,#testDice2,#trainLosses,meanScore(trainDice),meanScore(testDice2),meanScore(trainLosses)))
 							trainLosses = {}
 							trainDice = {}
-							testDice = {}
 							testDice2 = {}
+							collectgarbage()
 						end
 					end
 				end

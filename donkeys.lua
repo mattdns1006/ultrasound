@@ -7,9 +7,11 @@ do
 			function(idx)
 				params = threadParams
 				require "torch"
+				--require "cutorch"
 				require "xlua"
 				require "string"
 				require "image"
+				--cutorch.setDevice(1)
 
 				tid = idx -- Thread id
 				print(string.format("Initialized thread %d of %d.", tid,params.nThreads))

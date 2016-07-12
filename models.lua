@@ -28,7 +28,12 @@ local nOutputs
 local nInputs
 local kS = params.kernelSize
 local pad = torch.floor((kS-1)/2)
-
+function tableOp (x)
+	t = {}
+	t["add"] = nn.CAddTable
+	t["mul"] = nn.CMulTable
+	return t[x]
+end
 
 function shortcut(nInputPlane, nOutputPlane, stride)
 	return nn.Sequential()
@@ -56,7 +61,7 @@ function block(model,nInputs,nOutputs)
 	model:add(Convolution(nInputs,nOutputs,3,3,1,1,1,1))
 	model:add(SBN(nInputs))
 	model:add(af())
-	model:add(Pool(3,3,2,2,1,1))
+
 end
 
 function models.model2()
@@ -78,6 +83,24 @@ function models.model2()
 	nInputs = nOutputs
 	model:add(Convolution(nInputs,1,3,3,1,1,1,1))
 	model:add(nn.Sigmoid())
+	layers.init(model)
+	return model
+end
+
+function models.model3()
+	
+	local model = nn.Sequential()
+	local nInputs
+	local nOutputs
+
+	for i =1,params.nDown do
+		if i == 1 then nInputs = 1; else nInputs = nOutputs; end
+		if i == 1 then nOutputs = nFeats; else nOutputs = nOutputs + nFeatsInc ; end
+		if i > 4 then
+			block(model,nInputs,nOutputs)
+			model:add(Pool(3,3,2,2,1,1))
+		end
+	end
 	layers.init(model)
 	return model
 end

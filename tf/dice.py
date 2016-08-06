@@ -8,7 +8,7 @@ def dice(yPred,yTruth,thresh):
     intersection = 2*tf.reduce_sum(mul) + smooth
     union = tf.reduce_sum(yPredThresh) + tf.reduce_sum(yTruth) + smooth
     dice = intersection/union
-    return dice
+    return dice, yPredThresh
 
 if __name__ == "__main__":
     with tf.Session() as sess:
